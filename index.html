@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+    <style>
+
+        @font-face {
+            font-family: "Classic Console Neue";
+            font-size: normal;
+            font-weight: 400;
+            src: url(./static/font/classic_console_neue.ttf) format("truetype");
+        }
+
+        @font-face {
+            font-family: "Sim Sun";
+            font-size: normal;
+            font-weight: 400;
+            src: url(./static/font/sim_sun.ttf) format("truetype");
+        }
+
+        html {
+            background-color: black;
+            font-family: "Classic Console Neue", "HYBaoSongJ";
+        }
+
+        #transition-gif {
+            position: fixed;
+            height: 60vh;
+            width: 60vw;
+            top: 10vh;
+            left: 20vw;
+            filter: grayscale(100%) sepia(100%) hue-rotate(90deg);
+            display: none;
+            z-index: 1000;
+        }
+
+        #canvas {
+            display: none;
+        }
+
+        #video {
+            width: 100vw;
+            height: 100vh;
+            object-fit: cover;
+            filter: grayscale(100%) sepia(100%) hue-rotate(90deg);
+        }
+
+        #terminal-layer {
+            position: fixed;
+            height: 51vh;
+            width: 46vw;
+            background-color: black;
+            top: 10vh;
+            left: 20vw;
+            color: grey;
+            padding: 5vh 7vw 5vh 7vw;
+            filter: grayscale(100%) sepia(100%) hue-rotate(90deg);
+            overflow-x: hidden;
+            overflow-y: scroll;
+            word-wrap: break-word;
+            display: none;
+        }
+
+        #terminal-layer.standby {
+            top: 60.5vh;
+            padding-top: 0;
+            height: 5.5vh;
+        }
+
+        #terminal-layer > p {
+            font-size: 2.5vh;
+            line-height: 2.5vh;
+            margin: 0;
+            margin-top: 0.25vh;
+        }
+
+        #terminal-layer > p.cn {
+            font-size: 2vh;
+        }
+
+        #WNFA-heart {
+            display: none;
+            position: fixed;
+            height: 45.5vh;
+            width: 46vw;
+            top: 10vh;
+            left: 20vw;
+            padding: 5vh 7vw 0vh 7vw;
+            object-fit: contain;
+            background-color: black;
+            filter: grayscale(100%) sepia(100%) hue-rotate(90deg);
+        }
+
+        #logo {
+            height: 4vh;
+            margin: 0;
+            padding: 0;
+        }
+
+        #top-layer,
+        #second-layer {
+            position: fixed;
+            display: flex;
+            height: 100vh;
+            width: 100vw;
+            top: 0;
+            left: 0;
+        }
+
+        #top-layer {
+            z-index: 1000;
+        }
+
+        #second-layer {
+            z-index: 999;
+        }
+
+        #monitor-frame {
+            height: 100vh;
+            width: 100vw;
+            margin: auto;
+        }
+
+        #monitor-engraving {
+            position: fixed;
+            height: 12vh;
+            top: 71vh;
+            right: 19vw;
+        }
+
+
+    </style>
+    <script>
+        const endpointURL = "localhost:8000/";
+        const submitAPIURL = "api/submit/ticket";
+        const actions = {};
+
+        const date = new Date();
+        const figure1 = "&nbsp0&nbsp &nbsp0&nbsp<br>-|- /|\\<br>/&nbsp\\ /&nbsp\\";
+        const figure2 = "&nbsp0&nbsp &nbsp0&nbsp<br>/|\\ -|-<br>/&nbsp\\ /&nbsp\\";
+        const promptStr = '$: ';
+
+        const figureEl = createHTMLElement('p', figure1);
+        const flashCursor = createHTMLElement('p', promptStr);
+        const dividor1 = createHTMLElement('p', "-------------------");
+        const dividor2 = createHTMLElement('p', "-------------------");
+        const systemStr = createHTMLElement('p', "System: WNFA-OS 0.1.2");
+        const dateStr = createHTMLElement('p', "Date: " + date.getFullYear().toString() + "." + (date.getMonth() + 1).toString() + "." + date.getDate().toString());
+        const WNFA_logo = createHTMLElement('img', "", id="logo");
+        WNFA_logo.src = "./static/img/logo-grey.png";
+
+        let promptFlash = false;
+        let figureFlash = false;
+
+        function addKeyPressAction(key, action) {
+            actions[key] = action;
+        }
+
+        function keyPress(key, actions) {
+            if (key.keyCode in actions) {
+                actions[key.keyCode]();
+            }
+        }
+
+        function startListeningForKeyPress() {
+            document.addEventListener("keydown", (k) => { this.keyPress(k, actions) });
+        }
+
+        function submitPhotoTicket(base64, callback = () => {}) {
+            fetch('http://' + endpointURL + submitAPIURL, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    'data': base64,
+                })
+            })
+                .then(() => {
+                    callback(suc=true);
+                })
+                .catch((e) => {
+                    console.log('Error', e);
+                    callback(suc=false);
+                });
+        }
+
+        function takePhotoToBase64(vid, canvas) {
+            canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
+            return canvas.toDataURL('image/jpeg').split(';base64,')[1];
+        }
+
+        async function connectCam (vid, callback = () => {}) {
+            let stream = await navigator.mediaDevices.getUserMedia({video: true, audio: false});
+            vid.srcObject = stream;
+            callback();
+        }
+
+        function terminalTypingText() {};
+        
+        function terminalWhileWaiting() {};
+
+        function createHTMLElement(tag, innerHTML, id=null, classname=null) {
+            const el = document.createElement(tag);
+            el.innerHTML = innerHTML;
+            if (id !== null) {
+                el.id = id;
+            }
+            if (classname !== null) {
+                el.classList.add(classname);
+            }
+            return el;
+        }
+        
+        setInterval(() => {
+            if (promptFlash) {
+                flashCursor.innerHTML = promptStr + '_';
+                promptFlash = false;
+            } else {
+                flashCursor.innerHTML = promptStr;
+                promptFlash = true;
+            }
+            
+        }, 500);
+
+        setInterval(() => {
+                if (figureFlash) {
+                    figureEl.innerHTML = figure1;
+                    figureFlash = false;
+                } else {
+                    figureEl.innerHTML = figure2;
+                    figureFlash = true;
+                }
+            }, 300);
+
+        window.addEventListener('resize', () => {
+            flashCursor.scrollIntoView(true);
+        })
+
+        function screenTransitionFlash(callback) {
+            const transition_gif = document.querySelector("#transition-gif");
+            transition_gif.style.display = "block";
+            setTimeout(() => {
+                transition_gif.style.display = "none";
+                callback();
+            }, 500);
+        }
+
+        function terminalAnimeWaiting(textList, terminal_layer) {
+            
+            let textListIndex = 0;
+            const WNFA_heart = document.querySelector("#WNFA-heart");
+            const video = document.querySelector("#video");
+            video.style.display = "none";
+
+            terminal_layer.appendChild(dividor1);
+            terminal_layer.appendChild(WNFA_logo);
+            terminal_layer.appendChild(systemStr);
+            terminal_layer.appendChild(dateStr);
+            terminal_layer.appendChild(dividor2);
+            terminal_layer.appendChild(flashCursor);
+
+            let printTextListInterval = setInterval(() => {
+                if (textListIndex >= textList.length) {
+                    clearInterval(printTextListInterval);
+                    // terminal_layer.insertBefore(figureEl, flashCursor);
+                    screenTransitionFlash(()=>{
+                        WNFA_heart.style.display = "block";
+                        terminal_layer.classList.add("standby");
+                        flashCursor.scrollIntoView(true);                        
+                    });
+ 
+                } else {
+                    let text_obj = textList[textListIndex++];
+                    let el = (typeof text_obj == "string") ? createHTMLElement("p", text_obj) : createHTMLElement("p", text_obj[0], null, text_obj[1]);
+                    
+                    terminal_layer.insertBefore(el, flashCursor);
+                    flashCursor.scrollIntoView(true);
+                }
+                
+            }, 500);
+
+            return () => {
+                video.style.display = "block"
+                clearInterval(printTextListInterval);
+                WNFA_heart.style.display = "none";
+                terminal_layer.classList.remove("standby");
+                terminal_layer.innerHTML = "";
+            }
+        }
+
+        // setup keylistener
+        let enterKeyListener = () => {};
+        addKeyPressAction(13, () => { enterKeyListener() }); 
+        startListeningForKeyPress();
+
+        // after DOM loaded
+        window.addEventListener('load', () => {
+
+            const video = document.querySelector("#video");
+            const canvas = document.querySelector("#canvas");
+            const terminal_layer = document.querySelector("#terminal-layer");
+            const transition_gif = document.querySelector("#transition-gif");
+
+            const textList = [
+                "closing camera stream...","","",
+                "core systems online...","",
+                "thanks for using WNFA...",
+                "start text processing sequence...","","","",
+                
+                "<br>",
+                ["荷叶滴落泪水<br>来不及 浸透书页<br>一百年 一千年<br>点燃一片通电的网", "cn"],"","",
+                "<br>",
+                ["回想 回想<br>那心的铁片<br>也要发出轰响", "cn"],"","",
+                "<br>","","","",
+
+                "please wait...",
+            ]
+
+
+
+            const enterKeyhandler = () => {
+                enterKeyListener = () => {};                                            // disable enter key for the duration
+                
+                screenTransitionFlash(() => {
+                    video.pause();                                                      // pause video
+                    terminal_layer.style.display = "block";                             // turn on terminal layer
+                    
+                    let animationStopFunc = terminalAnimeWaiting(textList, terminal_layer);
+                    let timeStart = performance.now();
+                    let animationTimeNeeded = textList.length * 500 + 2000 + 500;
+
+                    submitPhotoTicket(takePhotoToBase64(video, canvas), (suc) => {      // take a photo and submit, then waiting for response       
+                        const stopSequenceFunc = () => {
+                            if (suc) {
+                                // success
+                                // do terminal message
+                                screenTransitionFlash(()=>{
+                                    video.play();                               // start video
+                                    terminal_layer.style.display = "none";       // remove terminal layer
+                                    animationStopFunc();
+                                    enterKeyListener = enterKeyhandler;         // reenable enter key                                    
+                                });
+
+                                
+                            } else {
+                                // error
+                                // display terminal message error
+                                // countdown
+                                
+                                // return to working state
+                                screenTransitionFlash(()=>{
+                                    video.play();                               // start video
+                                    terminal_layer.style.display = "none";       // remove terminal layer
+                                    animationStopFunc();
+                                    enterKeyListener = enterKeyhandler;         // reenable enter key
+                                });
+ 
+                            }
+                        }
+                        let timeEnd = performance.now();
+                        if ((timeEnd - timeStart) < animationTimeNeeded) {
+                            console.log("1");
+                            setTimeout(() => {
+                                stopSequenceFunc();
+                            }, animationTimeNeeded - (timeEnd - timeStart));
+                        } else {
+                            console.log("2");
+                            stopSequenceFunc();
+                        }
+
+                    });
+                });
+
+                  
+            }
+
+            const initLogic = () => {
+                // play video
+                video.play();
+                // setup enter key
+                enterKeyListener = enterKeyhandler;
+            }
+
+            if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) {
+                alert("Please make sure your have a camera connected");
+            } else {
+                connectCam(video, initLogic);
+            }
+
+            // // testing
+            // terminal_layer.style.display = "block";                             // turn on terminal layer
+            // terminalAnimeWaiting(["Please wait"], terminal_layer);
+            // // end of testing
+        });
+
+    </script>
+</head>
+<body>
+    <div id="top-layer">
+        <img id="monitor-frame" src="./static/img/monitor_frame.png">
+        <img id="monitor-engraving" src="./static/img/monitor_engraving.png">
+    </div>
+    <div id="second-layer">
+        <img id="transition-gif" src="./static/img/transition_animation.gif">
+        <img id="WNFA-heart" src="./static/img/heart.gif">
+        <video id="video"></video>
+        <canvas id="canvas" height=1080 width=1920></canvas> 
+        <div id="terminal-layer"></div>        
+    </div>
+
+        
+ 
+</body>
+</html>
